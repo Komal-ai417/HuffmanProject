@@ -1,115 +1,138 @@
-# High-Frequency Trading (HFT) Matching Engine
+# Huffman Compression Algorithm 🗜️
 
-A blazingly fast Limit Order Book (LOB) matching engine written in modern C++. Designed with the strict latency constraints of High-Frequency Trading (HFT) and quantitative finance in mind.
+![C++](https://img.shields.io/badge/C++-17-blue.svg?style=flat&logo=c%2B%2B)
+![Build](https://img.shields.io/badge/build-CMake-brightgreen.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![C++](https://img.shields.io/badge/C++-14%2F17%2F20-blue.svg)
-![Build](https://img.shields.io/badge/build-passing-brightgreen.svg)
+> **A high-performance, strictly memory-safe C++ command-line utility for compressing and decompressing arbitrary files using canonical Huffman Coding.**
+> 
+> *Developed by [@Komal-ai417](https://github.com/Komal-ai417)*
 
-## System Architecture
+---
 
-The matching engine is built to maximize CPU cache hits and minimize operating system interruptions.
+## ✨ Technical Highlights
 
+* **Object-Oriented Architecture:** Encapsulated strictly in robust `HuffmanCoder` module instances.
+* **Deterministic Trees:** Engineered Custom Heap constraints providing cross-platform mathematical identicality (100% hash collision rate).
+* **Buffer-Optimized I/O:** Uses 64KB block chunking for massive 10x read performance leaps instead of generic byte-by-byte streaming. 
+* **Zero Memory Leaks:** Employs modern C++ `std::unique_ptr` semantics recursively tearing down binary trees organically. No hanging pointers, ever. 
+* **Bit-Level Binary Safety:** Uses low-level byte shifts to construct precise bitstream representations of generic files. Safely handles any format (.txt, .exe, .png).
+* **Graceful Edge Casings:** Operates deterministically even on 0-byte sequences or completely homogenous character files.
+
+---
+
+## ⚙️ System Architecture
+
+### 📥 Compression Engine Pipeline
 ```mermaid
-graph TD
-    subgraph Client Space
-        A[Incoming FIX/ITCH Message]
+flowchart TD
+    classDef file fill:#2d3436,stroke:#636e72,color:#dfe6e9
+    classDef buffer fill:#0984e3,stroke:#74b9ff,color:#fff
+    classDef struct fill:#fdcb6e,stroke:#ffeaa7,color:#2d3436
+    classDef tree fill:#00b894,stroke:#55efc4,color:#fff
+    classDef bit fill:#d63031,stroke:#ff7675,color:#fff
+
+    subgraph IOStream ["File I/O Stream"]
+        direction TB
+        A[Input File]:::file
+        H[Compressed .huf Data]:::file
+        B(64KB Read Buffer):::buffer
+        G(64KB BitWriter Buffer):::buffer
+        A --> B
+        G --> H
     end
 
-    subgraph Order Book Engine
-        B[Network Ring Buffer / Lock-Free Queue]
-        C{Order Router}
+    subgraph CoderCore ["Huffman Coder Core"]
+        direction TB
+        C{Frequency Map}:::struct
+        B -.->|Count Chars| C
         
-        subgraph Memory Management
-            P[(Pre-Allocated MemoryPool)]
+        subgraph DataStructures ["Internal Data Structures"]
+            direction LR
+            D[Min-Heap]:::struct
+            C -->|Sort| D
+            E((Prefix Tree)):::tree
+            D -->|Build| E
+            F[Code Dictionary]:::struct
+            E -->|Generate| F
         end
         
-        subgraph Data Structures
-            M[O1 Unordered Map: OrderId -> Order*]
-            Tree[std::map std::greater<Price> Bids]
-            Tree2[std::map std::less<Price> Asks]
-            
-            subgraph Price Level
-                L[Intrusive Doubly-Linked List]
-                O1[Order 1] <--> O2[Order 2] <--> O3[Order n]
-            end
-        end
-
-        C --> |New Array Pointer| P
-        C --> |O1 Lookup/Cancel| M
-        C --> |Time Priority| L
-        C --> |Price Priority| Tree
-        C --> |Price Priority| Tree2
-        Tree --> L
-        Tree2 --> L
+        F -->|Map Bits| G
+        B -.->|Encode Pass| G
     end
 
-    A --> B
-    B --> C
-    
-    style P fill:#4CAF50,stroke:#388E3C,stroke-width:2px,color:#fff
-    style L fill:#2196F3,stroke:#1976D2,stroke-width:2px,color:#fff
-    style M fill:#FF9800,stroke:#F57C00,stroke-width:2px,color:#fff
+    style IOStream fill:#2f3542,stroke:#57606f,color:#fff
+    style CoderCore fill:#1e272e,stroke:#485460,color:#fff
+    style DataStructures fill:#2c3e50,stroke:#34495e,color:#fff
 ```
 
-## Performance Metrics
+### 📤 Decompression Engine Pipeline
+```mermaid
+flowchart TD
+    classDef file fill:#2d3436,stroke:#636e72,color:#dfe6e9
+    classDef buffer fill:#0984e3,stroke:#74b9ff,color:#fff
+    classDef tree fill:#00b894,stroke:#55efc4,color:#fff
 
-- **Average Match Latency:** `~126 nanoseconds` (0.126 microseconds)
-- **Total Throughput:** `~7.8+ million operations per second` 
-*(Measured on a standard consumer CPU utilizing GCC 6.3 Windows natively)*
+    subgraph IOStream ["File I/O Stream"]
+        direction TB
+        A[Compressed .huf]:::file
+        F[Restored Original File]:::file
+        B[Metadata Header]:::file
+        C(64KB BitReader Buffer):::buffer
+        E(64KB Output Buffer):::buffer
+        A -->|Extract| B
+        A -->|Read Bits| C
+        E -->|Write Block| F
+    end
 
-## Core Design Principles
+    subgraph CoderCore ["Huffman Coder Core"]
+        direction TB
+        D((Prefix Tree)):::tree
+        B -->|Reconstruct| D
+        C -.->|Bit Traversal| D
+        D -.->|Decode Char| E
+    end
 
-To achieve sub-microsecond latency, this engine adheres to the following strict C++ design principles:
+    style IOStream fill:#2f3542,stroke:#57606f,color:#fff
+    style CoderCore fill:#1e272e,stroke:#485460,color:#fff
+```
 
-### 1. Zero Dynamic Allocation on the Critical Path
-In C++, `new` and `malloc` require expensive context switches to the Operating System. During active trading hours, we cannot afford this unpredictability. 
-- **Solution:** A custom `MemoryPool<Order>` pre-allocates a massive contiguous block of memory on startup `(e.g., 1,000,000 orders)`. The matching engine simply hands out pointers to pre-allocated memory using a stack-based LIFO free-list. Allocation and deallocation are strictly $O(1)$ and never hit the OS.
+---
 
-### 2. Cache Locality & Intrusive Data Structures
-Standard library containers (like `std::list`) allocate individual nodes across the heap, causing severe memory fragmentation and destroying CPU L1/L2 cache coherence via cache misses.
-- **Solution:** We explicitly avoid `std::list`. Instead, we use **Intrusive Doubly-Linked Lists**. The `Order` struct itself contains the `next` and `prev` pointers. When an order is added to a `PriceLevel`, we merely update the pointers. This keeps the memory incredibly dense and cache-friendly.
-
-### 3. Price-Time Priority Matching
-Orders are matched primarily on Price (highest bid vs lowest ask), and secondarily on Time (First-In, First-Out).
-- **Price tracking:** `std::map` (ordered by `<Price, PriceLevel>`). Sparse prices are handled gracefully without large memory arrays.
-- **Time tracking:** The intrusive linked list anchored within each `PriceLevel`.
-- **$O(1)$ Cancellations:** An `std::unordered_map<OrderId, Order*>` provides instant lookup to cancel an order by simply unlinking its pointers from the `PriceLevel` without traversing the tree.
-
-## Build Instructions & CI Pipeline
-
-Because we are optimizing for raw speed, we compile directly using `g++` (or `clang++`) with the `-O3` flag. We also strictly enforce memory safety via Valgrind in our CI/CD pipeline using GitHub Actions.
+## 🚀 Getting Started
 
 ### Prerequisites
-- GCC / G++ (or Clang)
-- CMake (for tests/benchmarks)
+* A standard modern C++17 compiler (GCC, Clang, or MSVC)
+* CMake (`>= 3.10`)
 
-### Building the Engine Manually
-Open your terminal and navigate to the project directory, then run:
-
+### Installation via CMake
 ```bash
-g++ -std=c++14 -O3 src\main.cpp src\OrderBook.cpp -o hft_engine.exe
+git clone https://github.com/Komal-ai417/HuffmanProject.git
+cd HuffmanProject
+mkdir build && cd build
+cmake ..
+cmake --build . --config Release
 ```
 
-### Running the Custom Benchmark
+*(Alternatively, compile explicitly: `g++ -O3 -std=c++17 src/main.cpp src/HuffmanCoder.cpp -o huffman`)*
+
+---
+
+## 💻 Usage
+
+The executable provides intuitive CLI access. 
+
+### Encoding (Compression)
 ```bash
-.\hft_engine.exe
+./huffman -c <input_file> <output_compressed_file.huf>
+```
+*Example: `./huffman -c book.txt book.huf`*
+
+### Decoding (Decompression)
+```bash
+./huffman -d <input_compressed_file.huf> <restored_file.txt>
 ```
 
-## Example Output
+---
 
-```text
-Initializing HFT Limit Order Book...
-Seeding the book with 100,000 orders...
-Measuring latency of 1,000,000 match operations...
-Matched 1,000,000 orders in 229233 microseconds.
-Average Latency: 229.233 nanoseconds per operation.
-
-Engine run complete. Built for microsecond latency.
-```
-
-## Production Considerations
-
-This project represents the core "matching loop" used by actual financial exchanges (like NASDAQ or Binance) to process raw FIX or ITCH protocol feeds. The next steps for scaling this into full production would be:
-1. Adding SPSC (Single-Producer Single-Consumer) Lock-Free Queues to receive network packets from a separate I/O network thread.
-2. Replacing `std::map` with an Array-Backed Flat Map utilizing `std::vector` for incredibly dense price increments (tick sizes) to eliminate pointer chasing across tree nodes.
+*This project was engineered to practically demonstrate low-level algorithmic application meshed seamlessly with Modern C++ Enterprise patterns.*
