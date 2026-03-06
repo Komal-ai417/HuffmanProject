@@ -1,35 +1,50 @@
+#include "HuffmanCoder.h"
 #include <iostream>
-#include <vector>
-#include <chrono>
-#include <iomanip>
-#include "OrderBook.h"
+#include <string>
 
-int main() {
-    std::cout << "Initializing HFT Limit Order Book...\n";
-    
-    // Allocate space for 1,000,000 resting orders
-    hft::OrderBook ob(1'000'000);
-    
-    std::cout << "Seeding the book with 100,000 orders...\n";
-    for (uint64_t i = 1; i <= 100000; ++i) {
-        ob.add_order(i, hft::OrderType::Limit, 1000 + (i % 100), 10, hft::Side::Sell);
+void printHelp() {
+    std::cout << "Huffman Compression Utility\n"
+              << "A high-performance C++ utility explicitly managing memory trees.\n\n"
+              << "Usage Commands:\n"
+              << "  Compress:   huffman -c <input_file> <output_file>\n"
+              << "  Decompress: huffman -d <input_file> <output_file>\n\n"
+              << "Example:\n"
+              << "  huffman -c ./test.txt ./test.huf\n"
+              << "  huffman -d ./test.huf ./test_restored.txt\n";
+}
+
+int main(int argc, char* argv[]) {
+    // Assert 4 active params are provided
+    if (argc != 4) {
+        std::cerr << "Invalid parameters executed.\n\n";
+        printHelp();
+        return 1;
     }
-    
-    std::cout << "Measuring latency of 1,000,000 match operations...\n";
-    auto start = std::chrono::high_resolution_clock::now();
-    uint64_t start_id = 200000;
-    
-    for (uint64_t i = 0; i < 1000000; ++i) {
-        // Taker buy order crossing into the sell book
-        ob.add_order(start_id + i, hft::OrderType::Limit, 1100, 10, hft::Side::Buy);
+
+    std::string mode = argv[1];
+    std::string inputFile = argv[2];
+    std::string outputFile = argv[3];
+
+    HuffmanCoder coder;
+
+    try {
+        if (mode == "-c") {
+            std::cout << "[INFO] Compressing '" << inputFile << "' -> '" << outputFile << "'\n";
+            coder.compress(inputFile, outputFile);
+            std::cout << "[SUCCESS] File compressed seamlessly.\n";
+        } else if (mode == "-d") {
+            std::cout << "[INFO] Decompressing '" << inputFile << "' -> '" << outputFile << "'\n";
+            coder.decompress(inputFile, outputFile);
+            std::cout << "[SUCCESS] File fully mathematically reconstructed.\n";
+        } else {
+            std::cerr << "Mode validation failed. Ensure using either -c or -d.\n\n";
+            printHelp();
+            return 1;
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[CRITICAL EXCEPTION RUNTIME ERROR] " << e.what() << "\n";
+        return 1;
     }
-    
-    auto end = std::chrono::high_resolution_clock::now();
-    auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    
-    std::cout << "Matched 1,000,000 orders in " << diff << " microseconds.\n";
-    std::cout << "Average Latency: " << std::fixed << std::setprecision(3) << (static_cast<double>(diff) * 1000.0 / 1000000.0) << " nanoseconds per operation.\n";
-    std::cout << "\nEngine run complete. Built for microsecond latency.\n";
-    
+
     return 0;
 }
