@@ -23,62 +23,78 @@
 
 ## ⚙️ System Architecture
 
-The compression engine is built to maximize I/O throughput and minimize memory footprint using advanced buffered system calls and deterministic pointer-safety.
-
+### 📥 Compression Engine Pipeline
 ```mermaid
 flowchart TD
-    %% Node Styles
-    classDef client fill:#2C3E50,stroke:#34495E,color:#fff;
-    classDef engine fill:#34495E,stroke:#2C3E50,color:#fff;
-    classDef memory fill:#E67E22,stroke:#D35400,color:#fff;
-    classDef buffer fill:#2980B9,stroke:#2471A3,color:#fff;
-    classDef data fill:#27AE60,stroke:#2ECC71,color:#fff;
-    
-    subgraph ClientSpace [Client Interface]
-        CLI[huffman.exe CLI Arguments]:::client
-    end
+    classDef file fill:#2d3436,stroke:#636e72,color:#dfe6e9
+    classDef buffer fill:#0984e3,stroke:#74b9ff,color:#fff
+    classDef struct fill:#fdcb6e,stroke:#ffeaa7,color:#2d3436
+    classDef tree fill:#00b894,stroke:#55efc4,color:#fff
+    classDef bit fill:#d63031,stroke:#ff7675,color:#fff
 
-    subgraph CoreEngine [Huffman Compression Engine]
+    subgraph IOStream ["File I/O Stream"]
         direction TB
-        
-        subgraph IOPhase [I/O Phase & Buffering]
-            Input[(Input File)]:::data
-            ReadBuffer[64KB Read Buffer Vector]:::buffer
-            WriteBuffer[64KB Write Buffer Vector]:::buffer
-            Output[(Output .huf File)]:::data
-            
-            Input -->|std::ifstream::read| ReadBuffer
-            WriteBuffer -->|std::ofstream::write| Output
-        end
-
-        subgraph CompressionLogic [Tree Structures & Logic]
-            FreqMap[O 1 Frequency Hash Map: char -> std::uint64]:::memory
-            MinHeap[Min-Heap Priority Queue]:::memory
-            PrefixTree[Huffman Prefix Tree \std::unique_ptr\]:::memory
-            CodeMap[O 1 Encoded Map: char -> bitstring]:::memory
-            
-            ReadBuffer -. "Phase 1: Count Chars" .-> FreqMap
-            FreqMap -. "Construct Heap" .-> MinHeap
-            MinHeap -. "Merge Smallest" .-> PrefixTree
-            PrefixTree -. "Generate Sequences" .-> CodeMap
-        end
-
-        subgraph BitwiseOps [Bit-Level Transcoding]
-            BitWriter[BitWriter: Shift & Pack Bits]
-            BitReader[BitReader: Extract Bits]
-            
-            CodeMap -. "Phase 2: Encode" .-> BitWriter
-            BitWriter --> WriteBuffer
-        end
+        A[Input File]:::file
+        H[Compressed .huf Data]:::file
+        B(64KB Read Buffer):::buffer
+        G(64KB BitWriter Buffer):::buffer
+        A --> B
+        G --> H
     end
 
-    CLI -->|Initiate| InputFile
+    subgraph CoderCore ["Huffman Coder Core"]
+        direction TB
+        C{Frequency Map}:::struct
+        B -.->|Count Chars| C
+        
+        subgraph DataStructures ["Internal Data Structures"]
+            direction LR
+            D[Min-Heap]:::struct
+            C -->|Sort| D
+            E((Prefix Tree)):::tree
+            D -->|Build| E
+            F[Code Dictionary]:::struct
+            E -->|Generate| F
+        end
+        
+        F -->|Map Bits| G
+        B -.->|Encode Pass| G
+    end
 
-    style ClientSpace fill:#2c3e50,stroke:#34495e,stroke-width:2px,color:#fff
-    style CoreEngine fill:#34495e,stroke:#2c3e50,stroke-width:2px,color:#fff
-    style CompressionLogic fill:#22313F,stroke:#34495e,stroke-width:1px,color:#fff
-    style IOPhase fill:#22313F,stroke:#34495e,stroke-width:1px,color:#fff
-    style BitwiseOps fill:#22313F,stroke:#34495e,stroke-width:1px,color:#fff
+    style IOStream fill:#2f3542,stroke:#57606f,color:#fff
+    style CoderCore fill:#1e272e,stroke:#485460,color:#fff
+    style DataStructures fill:#2c3e50,stroke:#34495e,color:#fff
+```
+
+### 📤 Decompression Engine Pipeline
+```mermaid
+flowchart TD
+    classDef file fill:#2d3436,stroke:#636e72,color:#dfe6e9
+    classDef buffer fill:#0984e3,stroke:#74b9ff,color:#fff
+    classDef tree fill:#00b894,stroke:#55efc4,color:#fff
+
+    subgraph IOStream ["File I/O Stream"]
+        direction TB
+        A[Compressed .huf]:::file
+        F[Restored Original File]:::file
+        B[Metadata Header]:::file
+        C(64KB BitReader Buffer):::buffer
+        E(64KB Output Buffer):::buffer
+        A -->|Extract| B
+        A -->|Read Bits| C
+        E -->|Write Block| F
+    end
+
+    subgraph CoderCore ["Huffman Coder Core"]
+        direction TB
+        D((Prefix Tree)):::tree
+        B -->|Reconstruct| D
+        C -.->|Bit Traversal| D
+        D -.->|Decode Char| E
+    end
+
+    style IOStream fill:#2f3542,stroke:#57606f,color:#fff
+    style CoderCore fill:#1e272e,stroke:#485460,color:#fff
 ```
 
 ---
