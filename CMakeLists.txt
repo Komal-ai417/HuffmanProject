@@ -34,3 +34,4 @@ add_executable(huffman_test tests/test_huffman.cpp src/HuffmanCoder.cpp)
 target_include_directories(huffman_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 add_test(NAME core_huffman_test COMMAND huffman_test)
+
