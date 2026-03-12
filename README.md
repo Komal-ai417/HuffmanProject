@@ -137,3 +137,4 @@ The executable provides intuitive CLI access.
 
 *This project was engineered to practically demonstrate low-level algorithmic application meshed seamlessly with Modern C++ Enterprise patterns.*
 
+
