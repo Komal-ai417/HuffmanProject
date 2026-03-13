@@ -1,4 +1,4 @@
-# Huffman Compression Algorithm 🗜️
+# Huffman Compression Algorithm
 
 ![C++](https://img.shields.io/badge/C++-17-blue.svg?style=flat&logo=c%2B%2B)
 ![Build](https://img.shields.io/badge/build-CMake-brightgreen.svg)
@@ -10,7 +10,7 @@
 
 ---
 
-## ✨ Technical Highlights
+## Technical Highlights
 
 * **Object-Oriented Architecture:** Encapsulated strictly in robust `HuffmanCoder` module instances.
 * **Deterministic Trees:** Engineered Custom Heap constraints providing cross-platform mathematical identicality (100% hash collision rate).
@@ -21,9 +21,9 @@
 
 ---
 
-## ⚙️ System Architecture
+## System Architecture
 
-### 📥 Compression Engine Pipeline
+### Compression Engine Pipeline
 ```mermaid
 flowchart TD
     classDef file fill:#2d3436,stroke:#636e72,color:#dfe6e9
@@ -66,7 +66,7 @@ flowchart TD
     style DataStructures fill:#2c3e50,stroke:#34495e,color:#fff
 ```
 
-### 📤 Decompression Engine Pipeline
+### Decompression Engine Pipeline
 ```mermaid
 flowchart TD
     classDef file fill:#2d3436,stroke:#636e72,color:#dfe6e9
@@ -99,7 +99,7 @@ flowchart TD
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 * A standard modern C++17 compiler (GCC, Clang, or MSVC)
@@ -118,7 +118,7 @@ cmake --build . --config Release
 
 ---
 
-## 💻 Usage
+## Usage
 
 The executable provides intuitive CLI access. 
 
