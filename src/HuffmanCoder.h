@@ -1,8 +1,8 @@
 #pragma once
 
 #include <string>
-#include <unordered_map>
-#include <memory>
+#include <array>
+#include <vector>
 #include <cstdint>
 
 class HuffmanCoder {
@@ -14,24 +14,33 @@ public:
     void decompress(const std::string& inputFile, const std::string& outputFile);
 
 private:
-    /// Huffman Tree Node
+    /// Arena-allocated flat tree node — uses integer indices instead of pointers.
+    /// This keeps all nodes contiguous in memory for maximum CPU cache efficiency.
     struct Node {
-        char ch;
-        uint64_t freq;
-        uint64_t id;
-        std::unique_ptr<Node> left;
-        std::unique_ptr<Node> right;
+        int left  = -1;  // Index into the tree vector for the left child (-1 = none)
+        int right = -1;  // Index into the tree vector for the right child (-1 = none)
+        uint64_t freq = 0;
+        unsigned char ch = 0;
 
-        Node(char character, uint64_t frequency, uint64_t nodeId) 
-            : ch(character), freq(frequency), id(nodeId), left(nullptr), right(nullptr) {}
-
-        Node(char character, uint64_t frequency, uint64_t nodeId, std::unique_ptr<Node> l, std::unique_ptr<Node> r)
-            : ch(character), freq(frequency), id(nodeId), left(std::move(l)), right(std::move(r)) {}
+        Node() = default;
+        Node(unsigned char character, uint64_t frequency)
+            : ch(character), freq(frequency) {}
     };
 
-    /// Generates the Huffman code mapping based on the constructed prefix tree
-    void buildCodes(const Node* root, const std::string& currentCode, std::unordered_map<char, std::string>& huffmanCodes);
+    /// Integer-based code representation: bits are stored in a uint64_t bitmask
+    /// and length tracks how many of those bits are valid.
+    /// Eliminates all std::string overhead from the hot encoding path.
+    struct Code {
+        uint64_t bits  = 0;
+        uint8_t  length = 0;
+    };
 
-    /// Builds the Huffman tree from character frequencies yielding the root unique pointer
-    std::unique_ptr<Node> buildTree(const std::unordered_map<char, uint64_t>& frequencies);
+    /// Recursively generates the Huffman code for each leaf character.
+    void buildCodes(int nodeIndex, const std::vector<Node>& tree,
+                    uint64_t currentBits, uint8_t currentLen,
+                    std::array<Code, 256>& huffmanCodes);
+
+    /// Builds the Huffman tree into 'tree' using arena allocation.
+    /// Returns the root node index, or -1 for an empty input.
+    int buildTree(const std::array<uint64_t, 256>& frequencies, std::vector<Node>& tree);
 };
