@@ -4,13 +4,16 @@
 
 void printHelp() {
     std::cout << "Huffman Compression Utility\n"
-              << "A high-performance C++ utility explicitly managing memory trees.\n\n"
-              << "Usage Commands:\n"
-              << "  Compress:   huffman -c <input_file> <output_file>\n"
-              << "  Decompress: huffman -d <input_file> <output_file>\n\n"
-              << "Example:\n"
-              << "  huffman -c ./test.txt ./test.huf\n"
-              << "  huffman -d ./test.huf ./test_restored.txt\n";
+              << "High-performance lossless file compressor using Huffman Coding.\n"
+              << "Optimised with arena-allocated trees, fixed-array frequency tables,\n"
+              << "64KB I/O buffering, and integer bitwise code emission.\n\n"
+              << "Usage:\n"
+              << "  Compress:   huffman -c <input_file>  <output_file.huf>\n"
+              << "  Decompress: huffman -d <input_file.huf> <output_file>\n\n"
+              << "Examples:\n"
+              << "  huffman -c document.txt  document.huf\n"
+              << "  huffman -d document.huf  document_restored.txt\n"
+              << "  huffman -c image.png     image.huf\n";
 }
 
 int main(int argc, char* argv[]) {
