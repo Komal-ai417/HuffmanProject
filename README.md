@@ -1,74 +1,142 @@
-# Huffman Compression Engine 🗜️
+# Huffman Compression Algorithm 🗜️
 
 ![C++](https://img.shields.io/badge/C++-17-blue.svg?style=flat&logo=c%2B%2B)
 ![Build](https://img.shields.io/badge/build-CMake-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-A high-performance, strictly memory-safe C++ command-line utility for lossless file compression and decompression using canonical Huffman Coding.
+> **A high-performance, strictly memory-safe C++ command-line utility for compressing and decompressing arbitrary files using canonical Huffman Coding.**
+> 
+> *Developed by [@Komal-ai417](https://github.com/Komal-ai417)*
 
-## ✨ Engineering Highlights
+---
 
-* **Arena-Allocated Tree:** The prefix tree is stored as a flat `std::vector<Node>` with integer indices. This guarantees contiguous memory allocation, eliminating heap scatter and drastically reducing CPU cache misses.
-* **O(1) Frequency Maps:** Replaced standard hash maps with fixed `std::array<uint64_t, 256>` for direct index lookups, achieving zero-collision and zero-allocation frequency counting.
-* **Bitwise Integer Encoding:** Variable-length codes are stored natively as `uint64_t`. Entire codewords are emitted to the buffer via a single bitwise shift, bypassing slow string-character iterations.
-* **64KB Buffered I/O:** Custom `BitWriter` and `BitReader` classes batch data into 64KB blocks, minimizing costly system calls during file stream operations.
-* **Deterministic Integrity:** Node sorting enforces a strict character-value tie-breaker, guaranteeing identical tree structures and seamless cross-platform decompression.
+## ✨ Technical Highlights
 
-## ⚙️ Pipeline Architecture
+| Feature | Implementation |
+|---|---|
+| **Arena-Allocated Tree** | Huffman tree stored as a flat `std::vector<Node>` with integer child indices — all 511 nodes contiguous in memory, eliminating heap scatter and CPU cache misses |
+| **O(1) Frequency Table** | `std::array<uint64_t, 256>` replaces `std::unordered_map` — direct index lookup, zero hashing, zero dynamic allocation |
+| **Integer Bit Codes** | Variable-length codes stored as `uint64_t bits` + `uint8_t length` — entire codewords emitted via single bitwise shift, no character-by-character string iteration |
+| **64KB Buffered I/O** | Both `BitWriter` and `BitReader` batch 64 KB at a time, minimising syscalls. Output decompression uses a matching 64KB flush buffer |
+| **Correct EOF Handling** | Read loop uses `while(true) { read; if(gcount==0) break; }` — prevents the subtle double-processing bug of partial final chunks |
+| **Deterministic Trees** | Nodes inserted in sorted character order + freq tie-breaking by char value — identical tree structure guaranteed across platforms and compilers |
+| **Full Edge Case Safety** | Empty files (0 bytes), single repeated character, and arbitrary binary data all handled correctly with SHA-256-verified round-trip fidelity |
+| **Cross-Platform CI** | GitHub Actions pipeline builds and tests on Ubuntu, Windows, and macOS on every push |
 
+---
+
+## ⚙️ System Architecture
+
+### 📥 Compression Engine Pipeline
 ```mermaid
 flowchart TD
     classDef file fill:#2d3436,stroke:#636e72,color:#dfe6e9
     classDef buffer fill:#0984e3,stroke:#74b9ff,color:#fff
     classDef struct fill:#fdcb6e,stroke:#ffeaa7,color:#2d3436
     classDef tree fill:#00b894,stroke:#55efc4,color:#fff
+    classDef bit fill:#d63031,stroke:#ff7675,color:#fff
 
-    subgraph IOStream ["File I/O Pipeline"]
+    subgraph IOStream ["File I/O Stream"]
         direction TB
-        A[Input File]:::file --> B(64KB Read Buffer):::buffer
-        G(64KB Write Buffer):::buffer --> H[Compressed .huf Data]:::file
+        A[Input File]:::file
+        H[Compressed .huf Data]:::file
+        B(64KB Read Buffer):::buffer
+        G(64KB BitWriter Buffer):::buffer
+        A --> B
+        G --> H
     end
 
-    subgraph CoderCore ["Compression Engine"]
+    subgraph CoderCore ["Huffman Coder Core"]
         direction TB
-        B -.->|Count| C{O(1) Freq Array}:::struct
-        C -->|Sort| D[Min-Heap]:::struct
-        D -->|Build| E((Arena Tree)):::tree
-        E -->|Map| F[Bit Dictionary]:::struct
-        B -.->|Encode| F
-        F -->|Shift Bits| G
+        C{Frequency Map}:::struct
+        B -.->|Count Chars| C
+        
+        subgraph DataStructures ["Internal Data Structures"]
+            direction LR
+            D[Min-Heap]:::struct
+            C -->|Sort| D
+            E((Prefix Tree)):::tree
+            D -->|Build| E
+            F[Code Dictionary]:::struct
+            E -->|Generate| F
+        end
+        
+        F -->|Map Bits| G
+        B -.->|Encode Pass| G
     end
 
     style IOStream fill:#2f3542,stroke:#57606f,color:#fff
     style CoderCore fill:#1e272e,stroke:#485460,color:#fff
-🚀 Getting Started
-Prerequisites
-A modern C++17 compiler (GCC, Clang, or MSVC)
+    style DataStructures fill:#2c3e50,stroke:#34495e,color:#fff
+```
 
-CMake (v3.10+)
+### 📤 Decompression Engine Pipeline
+```mermaid
+flowchart TD
+    classDef file fill:#2d3436,stroke:#636e72,color:#dfe6e9
+    classDef buffer fill:#0984e3,stroke:#74b9ff,color:#fff
+    classDef tree fill:#00b894,stroke:#55efc4,color:#fff
 
-Build Instructions
-Bash
-git clone [https://github.com/Komal-ai417/HuffmanProject.git](https://github.com/Komal-ai417/HuffmanProject.git)
-cd HuffmanProject
+    subgraph IOStream ["File I/O Stream"]
+        direction TB
+        A[Compressed .huf]:::file
+        F[Restored Original File]:::file
+        B[Metadata Header]:::file
+        C(64KB BitReader Buffer):::buffer
+        E(64KB Output Buffer):::buffer
+        A -->|Extract| B
+        A -->|Read Bits| C
+        E -->|Write Block| F
+    end
 
-mkdir build && cd build
-cmake ..
-cmake --build . --config Release
-💻 Usage
-The executable provides a streamlined, parameter-driven interface.
+    subgraph CoderCore ["Huffman Coder Core"]
+        direction TB
+        D((Prefix Tree)):::tree
+        B -->|Reconstruct| D
+        C -.->|Bit Traversal| D
+        D -.->|Decode Char| E
+    end
 
-Compress a file:
-
-Bash
-./huffman -c <input_file> <output_file.huf>
-Decompress a file:
-
-Bash
-./huffman -d <input_file.huf> <restored_file.txt>
+    style IOStream fill:#2f3542,stroke:#57606f,color:#fff
+    style CoderCore fill:#1e272e,stroke:#485460,color:#fff
+```
 
 ---
 
-This version gets straight to the technical merit of your C++ and algorithmic skills. 
+## 🚀 Getting Started
 
-Would you like me to write a quick `huffman_ci.yml` file so you can add a GitHub Action that automatically compiles and tests your code every time you push a commit?
+### Prerequisites
+* A standard modern C++17 compiler (GCC, Clang, or MSVC)
+* CMake (`>= 3.10`)
+
+### Installation via CMake
+```bash
+git clone https://github.com/Komal-ai417/HuffmanProject.git
+cd HuffmanProject
+mkdir build && cd build
+cmake ..
+cmake --build . --config Release
+```
+
+*(Alternatively, compile explicitly: `g++ -O3 -std=c++17 src/main.cpp src/HuffmanCoder.cpp -o huffman`)*
+
+---
+
+## 💻 Usage
+
+The executable provides intuitive CLI access. 
+
+### Encoding (Compression)
+```bash
+./huffman -c <input_file> <output_compressed_file.huf>
+```
+*Example: `./huffman -c book.txt book.huf`*
+
+### Decoding (Decompression)
+```bash
+./huffman -d <input_compressed_file.huf> <restored_file.txt>
+```
+
+---
+
+*This project was engineered to practically demonstrate low-level algorithmic application meshed seamlessly with Modern C++ Enterprise patterns.*
