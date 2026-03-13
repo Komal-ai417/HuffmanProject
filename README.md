@@ -1,4 +1,4 @@
-# Huffman Compression Algorithm
+# Huffman Compression Algorithm 🗜️
 
 ![C++](https://img.shields.io/badge/C++-17-blue.svg?style=flat&logo=c%2B%2B)
 ![Build](https://img.shields.io/badge/build-CMake-brightgreen.svg)
@@ -10,20 +10,24 @@
 
 ---
 
-## Technical Highlights
+## ✨ Technical Highlights
 
-* **Object-Oriented Architecture:** Encapsulated strictly in robust `HuffmanCoder` module instances.
-* **Deterministic Trees:** Engineered Custom Heap constraints providing cross-platform mathematical identicality (100% hash collision rate).
-* **Buffer-Optimized I/O:** Uses 64KB block chunking for massive 10x read performance leaps instead of generic byte-by-byte streaming. 
-* **Zero Memory Leaks:** Employs modern C++ `std::unique_ptr` semantics recursively tearing down binary trees organically. No hanging pointers, ever. 
-* **Bit-Level Binary Safety:** Uses low-level byte shifts to construct precise bitstream representations of generic files. Safely handles any format (.txt, .exe, .png).
-* **Graceful Edge Casings:** Operates deterministically even on 0-byte sequences or completely homogenous character files.
+| Feature | Implementation |
+|---|---|
+| **Arena-Allocated Tree** | Huffman tree stored as a flat `std::vector<Node>` with integer child indices — all 511 nodes contiguous in memory, eliminating heap scatter and CPU cache misses |
+| **O(1) Frequency Table** | `std::array<uint64_t, 256>` replaces `std::unordered_map` — direct index lookup, zero hashing, zero dynamic allocation |
+| **Integer Bit Codes** | Variable-length codes stored as `uint64_t bits` + `uint8_t length` — entire codewords emitted via single bitwise shift, no character-by-character string iteration |
+| **64KB Buffered I/O** | Both `BitWriter` and `BitReader` batch 64 KB at a time, minimising syscalls. Output decompression uses a matching 64KB flush buffer |
+| **Correct EOF Handling** | Read loop uses `while(true) { read; if(gcount==0) break; }` — prevents the subtle double-processing bug of partial final chunks |
+| **Deterministic Trees** | Nodes inserted in sorted character order + freq tie-breaking by char value — identical tree structure guaranteed across platforms and compilers |
+| **Full Edge Case Safety** | Empty files (0 bytes), single repeated character, and arbitrary binary data all handled correctly with SHA-256-verified round-trip fidelity |
+| **Cross-Platform CI** | GitHub Actions pipeline builds and tests on Ubuntu, Windows, and macOS on every push |
 
 ---
 
-## System Architecture
+## ⚙️ System Architecture
 
-### Compression Engine Pipeline
+### 📥 Compression Engine Pipeline
 ```mermaid
 flowchart TD
     classDef file fill:#2d3436,stroke:#636e72,color:#dfe6e9
@@ -66,7 +70,7 @@ flowchart TD
     style DataStructures fill:#2c3e50,stroke:#34495e,color:#fff
 ```
 
-### Decompression Engine Pipeline
+### 📤 Decompression Engine Pipeline
 ```mermaid
 flowchart TD
     classDef file fill:#2d3436,stroke:#636e72,color:#dfe6e9
@@ -99,7 +103,7 @@ flowchart TD
 
 ---
 
-## Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
 * A standard modern C++17 compiler (GCC, Clang, or MSVC)
@@ -118,7 +122,7 @@ cmake --build . --config Release
 
 ---
 
-## Usage
+## 💻 Usage
 
 The executable provides intuitive CLI access. 
 
@@ -136,5 +140,3 @@ The executable provides intuitive CLI access.
 ---
 
 *This project was engineered to practically demonstrate low-level algorithmic application meshed seamlessly with Modern C++ Enterprise patterns.*
-
-
