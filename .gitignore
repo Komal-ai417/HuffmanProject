@@ -22,7 +22,7 @@ compile_commands.json
 *.vcxproj
 *.filters
 
-# Generated files
+# Generated binaries and libraries
 *.exe
 *.dll
 *.so
@@ -31,9 +31,7 @@ compile_commands.json
 *.a
 *.lib
 
-# Test data artifacts
-*.log
+# Test data artifacts — these should never be committed
 *.huf
 *.bin
-*.txt
-!CMakeLists.txt
+*.log
