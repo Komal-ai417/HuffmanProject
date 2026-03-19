@@ -67,35 +67,54 @@ namespace {
         static constexpr size_t BUFFER_SIZE = 65536; // 64 KB
 
         explicit BitReader(std::ifstream& in)
-            : inStream(in), currentByte(0), bitCount(0), bufferPos(0), bufferLimit(0)
+            : inStream(in), bufferPos(0), bufferLimit(0), bitBuffer(0), bitsInBuffer(0)
         {
             buffer.resize(BUFFER_SIZE);
         }
 
-        /// Returns false only when the underlying stream is completely exhausted.
-        bool readBit(bool& bit) {
-            if (bitCount == 0) {
+        void fillBuffer() {
+            while (bitsInBuffer <= 56) {
                 if (bufferPos == bufferLimit) {
                     inStream.read(buffer.data(), BUFFER_SIZE);
                     bufferLimit = static_cast<size_t>(inStream.gcount());
                     bufferPos   = 0;
-                    if (bufferLimit == 0) return false; // True EOF
+                    if (bufferLimit == 0) break; // True EOF
                 }
-                currentByte = static_cast<unsigned char>(buffer[bufferPos++]);
-                bitCount    = 8;
+                bitBuffer = (bitBuffer << 8) | static_cast<unsigned char>(buffer[bufferPos++]);
+                bitsInBuffer += 8;
             }
-            --bitCount;
-            bit = (currentByte >> bitCount) & 1;
+        }
+
+        /// Returns false only when the underlying stream is completely exhausted.
+        bool readBit(bool& bit) {
+            if (bitsInBuffer == 0) fillBuffer();
+            if (bitsInBuffer == 0) return false;
+            
+            bit = (bitBuffer >> (bitsInBuffer - 1)) & 1;
+            --bitsInBuffer;
             return true;
+        }
+
+        /// Peeks the next 8 bits (padded with 0s if near EOF)
+        int peek8() {
+            if (bitsInBuffer < 8) fillBuffer();
+            if (bitsInBuffer >= 8) return (bitBuffer >> (bitsInBuffer - 8)) & 0xFF;
+            if (bitsInBuffer > 0)  return (bitBuffer << (8 - bitsInBuffer)) & 0xFF;
+            return 0;
+        }
+
+        /// Consumes n bits without reading them
+        void consume(int n) {
+            bitsInBuffer -= n;
         }
 
     private:
         std::ifstream&    inStream;
-        unsigned char     currentByte;
-        int               bitCount;
         std::vector<char> buffer;
         size_t            bufferPos;
         size_t            bufferLimit;
+        uint64_t          bitBuffer;
+        int               bitsInBuffer;
     };
 
 } // end anonymous namespace
@@ -116,6 +135,10 @@ void HuffmanCoder::buildCodes(int nodeIndex, const std::vector<Node>& tree,
         // Edge case: single unique character in the file
         huffmanCodes[node.ch] = (currentLen == 0) ? Code{0, 1} : Code{currentBits, currentLen};
         return;
+    }
+
+    if (currentLen >= 64) {
+        throw std::runtime_error("Huffman tree depth exceeded 64 bits. This adversarial file structure is unsupported.");
     }
 
     buildCodes(node.left,  tree, (currentBits << 1),       static_cast<uint8_t>(currentLen + 1), huffmanCodes);
@@ -292,6 +315,34 @@ void HuffmanCoder::decompress(const std::string& inputFile, const std::string& o
     std::vector<Node> tree;
     int rootIdx = buildTree(frequencies, tree);
 
+    // --- Build 8-bit Decompression Lookup Table (LUT) -------------------------
+    struct LUTEntry {
+        bool isLeaf;
+        uint8_t bitsConsumed;
+        unsigned char ch;
+        int nodeIndex;
+    };
+
+    std::array<LUTEntry, 256> lut{};
+    for (int i = 0; i < 256; ++i) {
+        int curNode = rootIdx;
+        int bits = 0;
+        for (bits = 0; bits < 8; ++bits) {
+            bool bit = (i >> (7 - bits)) & 1;
+            curNode = bit ? tree[static_cast<size_t>(curNode)].right 
+                          : tree[static_cast<size_t>(curNode)].left;
+            
+            if (tree[static_cast<size_t>(curNode)].left == -1 && 
+                tree[static_cast<size_t>(curNode)].right == -1) {
+                lut[static_cast<size_t>(i)] = {true, static_cast<uint8_t>(bits + 1), tree[static_cast<size_t>(curNode)].ch, 0};
+                break;
+            }
+        }
+        if (bits == 8) {
+            lut[static_cast<size_t>(i)] = {false, 8, 0, curNode};
+        }
+    }
+
     // --- Decode bitstream with buffered output --------------------------------
     constexpr size_t OUT_BUFFER_SIZE = 65536;
     std::vector<char> outBuffer(OUT_BUFFER_SIZE);
@@ -317,12 +368,31 @@ void HuffmanCoder::decompress(const std::string& inputFile, const std::string& o
     uint64_t  decodedChars = 0;
 
     while (decodedChars < totalChars) {
-        bool bit;
-        if (!bitReader.readBit(bit))
-            throw std::runtime_error("Unexpected EOF encountered during bitwise decompression parsing.");
+        // LUT Fast-Path if we are starting at the root
+        if (currentNode == rootIdx) {
+            int peekVal = bitReader.peek8();
+            const auto& entry = lut[static_cast<size_t>(peekVal)];
+            
+            if (entry.isLeaf) {
+                outBuffer[outBufferPos++] = static_cast<char>(entry.ch);
+                if (outBufferPos == OUT_BUFFER_SIZE) {
+                    out.write(outBuffer.data(), OUT_BUFFER_SIZE);
+                    outBufferPos = 0;
+                }
+                bitReader.consume(entry.bitsConsumed);
+                ++decodedChars;
+                continue;
+            } else {
+                currentNode = entry.nodeIndex;
+                bitReader.consume(8);
+            }
+        }
 
-        currentNode = bit ? tree[static_cast<size_t>(currentNode)].right
-                          : tree[static_cast<size_t>(currentNode)].left;
+        // Fallback bit-by-bit traversal for deep tree branches
+        bool bit;
+        if (!bitReader.readBit(bit)) throw std::runtime_error("Unexpected EOF encountered during bitwise decompression parsing.");
+
+        currentNode = bit ? tree[static_cast<size_t>(currentNode)].right : tree[static_cast<size_t>(currentNode)].left;
 
         const Node& cur = tree[static_cast<size_t>(currentNode)];
         if (cur.left == -1 && cur.right == -1) {
