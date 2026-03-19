@@ -26,10 +26,29 @@ namespace {
         ~BitWriter() { flush(); }
 
         /// Writes 'length' bits from 'codeBits' (MSB first) in a single operation.
-        /// Uses bitwise shifts — no per-character loop required.
+        /// Writes 'length' bits from 'codeBits' (MSB first) in a single operation.
         void writeCode(uint64_t codeBits, uint8_t length) {
-            bitBuffer     = (bitBuffer << length) | codeBits;
-            bitsInBuffer += length;
+            if (bitsInBuffer + length <= 64) {
+                bitBuffer = (bitBuffer << length) | codeBits;
+                bitsInBuffer += length;
+            } else {
+                int excess = bitsInBuffer + length - 64;
+                uint64_t topBits = codeBits >> excess;
+                bitBuffer = (bitBuffer << (64 - bitsInBuffer)) | topBits;
+                
+                // Flush the 64-bit buffer fully
+                for (int i = 7; i >= 0; --i) {
+                    byteBuffer[bufferPos++] = static_cast<char>((bitBuffer >> (i * 8)) & 0xFF);
+                    if (bufferPos == BUFFER_SIZE) {
+                        outStream.write(byteBuffer.data(), BUFFER_SIZE);
+                        bufferPos = 0;
+                    }
+                }
+                
+                bitBuffer = codeBits & ((1ULL << excess) - 1);
+                bitsInBuffer = excess;
+                return; // bits >= 8 flush happens naturally in subsequent loops or final flush
+            }
 
             while (bitsInBuffer >= 8) {
                 bitsInBuffer -= 8;
@@ -315,6 +334,26 @@ void HuffmanCoder::decompress(const std::string& inputFile, const std::string& o
     std::vector<Node> tree;
     int rootIdx = buildTree(frequencies, tree);
 
+    // --- Decode bitstream with buffered output --------------------------------
+    constexpr size_t OUT_BUFFER_SIZE = 65536;
+    std::vector<char> outBuffer(OUT_BUFFER_SIZE);
+    size_t outBufferPos = 0;
+
+    const Node& root = tree[static_cast<size_t>(rootIdx)];
+
+    // Fast-path: single unique character — no bitstream was written
+    if (root.left == -1 && root.right == -1) {
+        for (uint64_t i = 0; i < totalChars; ++i) {
+            outBuffer[outBufferPos++] = static_cast<char>(root.ch);
+            if (outBufferPos == OUT_BUFFER_SIZE) {
+                out.write(outBuffer.data(), OUT_BUFFER_SIZE);
+                outBufferPos = 0;
+            }
+        }
+        if (outBufferPos > 0) out.write(outBuffer.data(), static_cast<std::streamsize>(outBufferPos));
+        return;
+    }
+
     // --- Build 8-bit Decompression Lookup Table (LUT) -------------------------
     struct LUTEntry {
         bool isLeaf;
@@ -341,26 +380,6 @@ void HuffmanCoder::decompress(const std::string& inputFile, const std::string& o
         if (bits == 8) {
             lut[static_cast<size_t>(i)] = {false, 8, 0, curNode};
         }
-    }
-
-    // --- Decode bitstream with buffered output --------------------------------
-    constexpr size_t OUT_BUFFER_SIZE = 65536;
-    std::vector<char> outBuffer(OUT_BUFFER_SIZE);
-    size_t outBufferPos = 0;
-
-    const Node& root = tree[static_cast<size_t>(rootIdx)];
-
-    // Fast-path: single unique character — no bitstream was written
-    if (root.left == -1 && root.right == -1) {
-        for (uint64_t i = 0; i < totalChars; ++i) {
-            outBuffer[outBufferPos++] = static_cast<char>(root.ch);
-            if (outBufferPos == OUT_BUFFER_SIZE) {
-                out.write(outBuffer.data(), OUT_BUFFER_SIZE);
-                outBufferPos = 0;
-            }
-        }
-        if (outBufferPos > 0) out.write(outBuffer.data(), static_cast<std::streamsize>(outBufferPos));
-        return;
     }
 
     BitReader bitReader(in);
